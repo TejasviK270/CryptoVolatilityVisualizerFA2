@@ -130,7 +130,7 @@ elif mode == "🧮 Mathematical Simulation":
     noise_level = st.sidebar.slider("Noise Level (σ)",            0,  500,  100,   10,
                     help="Std deviation of random jumps N(0,σ)")
     st.sidebar.subheader("⏱️ Time Range")
-    num_days    = st.sidebar.slider("Number of Days", 1, 30, 7)
+    num_days = st.sidebar.slider("Number of Days", 1, 30, 7)
 
 else:  # Compare Both
     st.sidebar.markdown("---")
@@ -334,36 +334,31 @@ def show_sidebar_metrics(df):
 #      correctly regardless of data gaps or size.
 # ─────────────────────────────────────────────────────────────────────────────
 def date_range_filter(df, key_prefix="main"):
-    # Get actual date boundaries from the data (as timezone-aware dates)
     min_date = df["Timestamp"].min().date()
     max_date = df["Timestamp"].max().date()
-    total_days = (max_date - min_date).days
-
-    if total_days < 1:
-        return df  # not enough data to filter
+    total_days_in_data = (max_date - min_date).days
 
     st.sidebar.subheader("📅 Date Range Filter")
 
-    # Days slider — maps to actual dates in the data
+    # Ensure we never ask for more than 30 days, or more than the data has
+    limit_days = min(total_days_in_data, 30)
+    
+    if limit_days < 1:
+        return df
+
     days_back = st.sidebar.slider(
         "Show last N days",
         min_value=1,
-        max_value=min(max(total_days, 1), 30),
-        value=min(30, total_days),
+        max_value=30, # Hard limit set to 30
+        value=limit_days, 
         step=1,
         key=f"{key_prefix}_days_slider",
-        help="Slide to show up to 1 month (30 days) of data"
+        help="View up to the last 30 days of data."
     )
 
-    # Calculate start date from slider
     start_date = max_date - timedelta(days=days_back)
-
-    # Show the selected range clearly
-    st.sidebar.info(f"📆 {start_date} → {max_date}\n\n({days_back} day{'s' if days_back > 1 else ''})")
-
-    # Filter by actual timestamp values — not row count
     mask = df["Timestamp"].dt.date >= start_date
-    filtered = df[mask].copy()
+    return df[mask].copy()
 
     if len(filtered) == 0:
         st.warning("No data in selected date range — showing all data.")
@@ -384,20 +379,25 @@ if mode == "📊 Real Bitcoin Data":
     if err:
         st.warning(
             f"⚠️ **GitHub fetch failed:** {err}\n\n"
-            "**To fix:** Upload `btcusd_1-min_data.csv` to your GitHub repo "
+            "**To fix:** Upload the data file to your GitHub repo "
             "`Nihith007/Crypto-Volatility-Visualizer`.\n\n"
             "*Showing generated sample data in the meantime.*"
         )
     elif src == "github":
         st.success(
-            f"✅ Loaded `btcusd_1-min_data.csv` from GitHub — "
+            f"✅ Loaded data from GitHub — "
             f"**{len(df_raw):,} rows** | "
             f"{df_raw['Timestamp'].min().date()} → {df_raw['Timestamp'].max().date()}"
         )
 
     # Apply selected timezone to all timestamps
     df_tz = apply_timezone(df_raw, tz)
-
+    
+    # Optional: Pre-slice the dataframe to the last 30 days before even hitting the filter
+    last_date = df_tz["Timestamp"].max()
+    thirty_days_ago = last_date - timedelta(days=30)
+    df_tz = df_tz[df_tz["Timestamp"] >= thirty_days_ago]
+    
     # Dataset preview
     with st.expander("🔍 Dataset Preview — head() & shape (Stage 4 check)"):
         st.markdown(f"**Shape:** `{df_tz.shape[0]:,} rows × {df_tz.shape[1]} columns`")
